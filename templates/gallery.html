@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inslulu - 图片预览</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+        .upload-container {
+            margin-bottom: 2rem;
+        }
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            padding: 20px;
+        }
+        .image-card {
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .image-card img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+        .image-info {
+            margin-top: 10px;
+        }
+        .image-actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+        button {
+            padding: 0.5rem 1rem;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button.delete {
+            background-color: #dc3545;
+        }
+        button.delete:hover {
+            background-color: #c82333;
+        }
+        .error-message {
+            color: red;
+            margin-top: 1rem;
+            display: none;
+        }
+        #fileInput {
+            display: none;
+        }
+        .upload-btn {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background-color: #28a745;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .upload-btn:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Inslulu 图片预览</h1>
+        <button onclick="logout()">退出登录</button>
+    </div>
+
+    <div class="upload-container">
+        <input type="file" id="fileInput" accept="image/*" onchange="previewSelectedImage(event)">
+        <label for="fileInput" class="upload-btn">选择图片</label>
+        <button onclick="uploadFile()">上传图片</button>
+        <div id="errorMessage" class="error-message"></div>
+        <div id="previewContainer" style="display: none; margin-top: 20px;">
+            <img id="previewImage" style="max-width: 300px; max-height: 300px; object-fit: contain;">
+        </div>
+    </div>
+
+    <div class="gallery" id="gallery">
+        <!-- 图片将通过 JavaScript 动态加载 -->
+    </div>
+
+    <script>
+        // 检查登录状态
+        function checkAuth() {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                window.location.href = '/';
+            }
+            return token;
+        }
+
+        // 退出登录
+        function logout() {
+            localStorage.removeItem('token');
+            window.location.href = '/';
+        }
+
+        // 加载图片列表
+        async function loadImages() {
+            const token = checkAuth();
+            try {
+                const response = await fetch('/api/files', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const gallery = document.getElementById('gallery');
+                    gallery.innerHTML = '';
+
+                    data.files.forEach(file => {
+                        const card = document.createElement('div');
+                        card.className = 'image-card';
+                        card.innerHTML = `
+                            <img src="/api/preview/${file.filename}?token=${token}" alt="${file.filename}">
+                            <div class="image-info">
+                                <div>${file.filename}</div>
+                                <div>${formatFileSize(file.size)}</div>
+                            </div>
+                            <div class="image-actions">
+                                <button onclick="previewImage('${file.filename}')">预览</button>
+                                <button class="delete" onclick="deleteImage('${file.filename}')">删除</button>
+                            </div>
+                        `;
+                        gallery.appendChild(card);
+                    });
+                } else {
+                    if (response.status === 401) {
+                        logout();
+                    } else {
+                        showError('加载图片失败');
+                    }
+                }
+            } catch (error) {
+                showError('网络错误，请稍后重试');
+            }
+        }
+
+        // 预览选择的图片
+        function previewSelectedImage(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const previewContainer = document.getElementById('previewContainer');
+                    const previewImage = document.getElementById('previewImage');
+                    previewImage.src = e.target.result;
+                    previewContainer.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // 上传图片
+        async function uploadFile() {
+            const token = checkAuth();
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                showError('请选择要上传的图片');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+
+                if (response.ok) {
+                    fileInput.value = '';
+                    document.getElementById('previewContainer').style.display = 'none';
+                    loadImages();
+                } else {
+                    const data = await response.json();
+                    showError(data.error || '上传失败');
+                }
+            } catch (error) {
+                showError('网络错误，请稍后重试');
+            }
+        }
+
+        // 删除图片
+        async function deleteImage(filename) {
+            const token = checkAuth();
+            if (!confirm('确定要删除这张图片吗？')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/files/${filename}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    loadImages();
+                } else {
+                    const data = await response.json();
+                    showError(data.error || '删除失败');
+                }
+            } catch (error) {
+                showError('网络错误，请稍后重试');
+            }
+        }
+
+        // 预览图片
+        function previewImage(filename) {
+            const token = checkAuth();
+            const previewUrl = `/api/preview/${filename}?token=${token}`;
+            
+            // 创建一个新的窗口
+            const previewWindow = window.open('', '_blank');
+            previewWindow.document.write(`
+                <html>
+                <head>
+                    <title>预览图片</title>
+                    <style>
+                        body {
+                            margin: 0;
+                            padding: 20px;
+                            display: flex;
+                            justify-content: center;
+                            align-items: center;
+                            min-height: 100vh;
+                            background-color: #f5f5f5;
+                        }
+                        img {
+                            max-width: 100%;
+                            max-height: 90vh;
+                            object-fit: contain;
+                        }
+                        #loading {
+                            font-size: 18px;
+                            color: #666;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div id="loading">加载中...</div>
+                </body>
+                </html>
+            `);
+            
+            // 直接使用 URL 加载图片
+            const img = new Image();
+            img.onload = function() {
+                previewWindow.document.body.innerHTML = '';
+                previewWindow.document.body.appendChild(img);
+            };
+            img.onerror = function() {
+                previewWindow.document.body.innerHTML = '<div style="color: red;">图片加载失败</div>';
+            };
+            img.src = previewUrl;
+        }
+
+        // 显示错误信息
+        function showError(message) {
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            setTimeout(() => {
+                errorMessage.style.display = 'none';
+            }, 3000);
+        }
+
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // 页面加载时检查登录状态并加载图片
+        window.onload = function() {
+            checkAuth();
+            loadImages();
+        };
+    </script>
+</body>
+</html> 

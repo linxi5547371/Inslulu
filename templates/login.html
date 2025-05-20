@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inslulu - 登录</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+        input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 1rem;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .error-message {
+            color: red;
+            margin-top: 1rem;
+            display: none;
+        }
+        .switch-form {
+            text-align: center;
+            margin-top: 1rem;
+        }
+        .switch-form a {
+            color: #007bff;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .switch-form a:hover {
+            text-decoration: underline;
+        }
+        .form-title {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="loginForm">
+            <h2 class="form-title">登录</h2>
+            <div class="form-group">
+                <label for="loginUsername">用户名</label>
+                <input type="text" id="loginUsername" required>
+            </div>
+            <div class="form-group">
+                <label for="loginPassword">密码</label>
+                <input type="password" id="loginPassword" required>
+            </div>
+            <button onclick="login()">登录</button>
+            <div class="switch-form">
+                还没有账号？<a onclick="showRegisterForm()">立即注册</a>
+            </div>
+        </div>
+
+        <div id="registerForm" style="display: none;">
+            <h2 class="form-title">注册</h2>
+            <div class="form-group">
+                <label for="registerUsername">用户名</label>
+                <input type="text" id="registerUsername" required>
+            </div>
+            <div class="form-group">
+                <label for="registerPassword">密码</label>
+                <input type="password" id="registerPassword" required>
+            </div>
+            <div class="form-group">
+                <label for="confirmPassword">确认密码</label>
+                <input type="password" id="confirmPassword" required>
+            </div>
+            <button onclick="register()">注册</button>
+            <div class="switch-form">
+                已有账号？<a onclick="showLoginForm()">立即登录</a>
+            </div>
+        </div>
+
+        <div id="errorMessage" class="error-message"></div>
+    </div>
+
+    <script>
+        // 显示注册表单
+        function showRegisterForm() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('registerForm').style.display = 'block';
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        // 显示登录表单
+        function showLoginForm() {
+            document.getElementById('registerForm').style.display = 'none';
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        // 显示错误信息
+        function showError(message) {
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            setTimeout(() => {
+                errorMessage.style.display = 'none';
+            }, 3000);
+        }
+
+        // 登录
+        async function login() {
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+
+            if (!username || !password) {
+                showError('请填写用户名和密码');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    localStorage.setItem('token', data.access_token);
+                    window.location.href = '/gallery';
+                } else {
+                    showError(data.error || '登录失败');
+                }
+            } catch (error) {
+                showError('网络错误，请稍后重试');
+            }
+        }
+
+        // 注册
+        async function register() {
+            const username = document.getElementById('registerUsername').value;
+            const password = document.getElementById('registerPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+
+            if (!username || !password || !confirmPassword) {
+                showError('请填写所有字段');
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                showError('两次输入的密码不一致');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showError('注册成功，请登录');
+                    showLoginForm();
+                } else {
+                    showError(data.error || '注册失败');
+                }
+            } catch (error) {
+                showError('网络错误，请稍后重试');
+            }
+        }
+
+        // 检查是否已登录
+        function checkAuth() {
+            const token = localStorage.getItem('token');
+            if (token) {
+                window.location.href = '/gallery';
+            }
+        }
+
+        // 页面加载时检查登录状态
+        window.onload = checkAuth;
+    </script>
+</body>
+</html> 
