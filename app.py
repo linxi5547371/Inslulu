@@ -7,6 +7,7 @@ import os
 import logging
 from datetime import timedelta
 import jwt as pyjwt  # 添加 PyJWT 导入
+from urllib.parse import unquote
 
 # 配置日志
 logging.basicConfig(
@@ -132,7 +133,7 @@ def upload_file():
             return jsonify({'error': '不支持的文件类型'}), 400
         
         user_id = get_jwt_identity()
-        user = User.query.get(int(user_id))  # 将字符串ID转换为整数
+        user = db.session.get(User, int(user_id))
         
         if not user:
             logger.error(f"用户不存在: {user_id}")
@@ -157,7 +158,7 @@ def upload_file():
 def list_files():
     try:
         user_id = get_jwt_identity()
-        user = User.query.get(int(user_id))  # 将字符串ID转换为整数
+        user = db.session.get(User, int(user_id))
         
         if not user:
             logger.error(f"用户不存在: {user_id}")
@@ -192,7 +193,7 @@ def preview_image(filename):
         payload = pyjwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
         user_id = payload['sub']  # JWT 中的用户 ID 存储在 'sub' 字段
         
-        user = User.query.get(int(user_id))
+        user = db.session.get(User, int(user_id))
         if not user:
             return jsonify({'error': '用户不存在'}), 404
             
@@ -216,24 +217,39 @@ def preview_image(filename):
 def delete_file(filename):
     try:
         user_id = get_jwt_identity()
-        user = User.query.get(int(user_id))  # 将字符串ID转换为整数
+        user = db.session.get(User, int(user_id))
         
         if not user:
             logger.error(f"用户不存在: {user_id}")
             return jsonify({'error': '用户不存在'}), 404
         
-        filename = secure_filename(filename)
-        file_path = os.path.join(user.upload_folder, filename)
+        # 对URL编码的文件名进行解码
+        decoded_filename = unquote(filename)
         
-        if not os.path.exists(file_path):
-            logger.warning(f"删除文件失败: 文件不存在 {filename}")
+        # 获取用户文件夹中的所有文件
+        user_files = os.listdir(user.upload_folder)
+        logger.debug(f"用户文件夹中的文件: {user_files}")
+        
+        # 查找匹配的文件（忽略大小写和空格）
+        matching_file = None
+        for file in user_files:
+            # 移除文件名中的空格和下划线进行比较
+            normalized_file = file.replace(' ', '').replace('_', '').lower()
+            normalized_input = decoded_filename.replace(' ', '').replace('_', '').lower()
+            if normalized_file == normalized_input:
+                matching_file = file
+                break
+        
+        if not matching_file:
+            logger.warning(f"删除文件失败: 文件不存在 {decoded_filename}")
             return jsonify({'error': '文件不存在'}), 404
         
+        file_path = os.path.join(user.upload_folder, matching_file)
         os.remove(file_path)
-        logger.info(f"文件删除成功: {filename}")
+        logger.info(f"文件删除成功: {matching_file}")
         return jsonify({
             'message': '文件删除成功',
-            'filename': filename
+            'filename': matching_file
         }), 200
     except Exception as e:
         logger.error(f"删除文件失败: {str(e)}")
