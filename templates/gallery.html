@@ -20,6 +20,27 @@
         .upload-container {
             margin-bottom: 2rem;
         }
+        .filter-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 0 20px;
+        }
+        .filter-tab {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: white;
+            color: #666;
+        }
+        .filter-tab.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
         .gallery {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -331,6 +352,14 @@
             .play-icon::before {
                 border-width: 8px 0 8px 14px;
             }
+            .filter-tabs {
+                gap: 5px;
+                padding: 0 10px;
+            }
+            .filter-tab {
+                padding: 6px 12px;
+                font-size: 14px;
+            }
         }
     </style>
 </head>
@@ -356,6 +385,12 @@
             <div id="progressText" class="progress-text">准备上传...</div>
             <div id="uploadStatus" class="upload-status"></div>
         </div>
+    </div>
+
+    <div class="filter-tabs">
+        <div class="filter-tab active" data-filter="all" onclick="filterMedia('all')">全部</div>
+        <div class="filter-tab" data-filter="image" onclick="filterMedia('image')">图片</div>
+        <div class="filter-tab" data-filter="video" onclick="filterMedia('video')">视频</div>
     </div>
 
     <div class="gallery" id="gallery">
@@ -392,6 +427,9 @@
             window.location.href = '/';
         }
 
+        let allFiles = []; // 存储所有文件数据
+        let mediaCache = new Map(); // 存储媒体元素缓存
+
         // 加载媒体列表
         async function loadImages() {
             const token = checkAuth();
@@ -404,13 +442,8 @@
 
                 if (response.ok) {
                     const data = await response.json();
-                    const gallery = document.getElementById('gallery');
-                    gallery.innerHTML = '';
-
-                    data.files.forEach(file => {
-                        const card = createImageCard(file);
-                        gallery.appendChild(card);
-                    });
+                    allFiles = data.files; // 保存所有文件数据
+                    filterMedia('all'); // 默认显示全部
                 } else {
                     if (response.status === 401) {
                         logout();
@@ -423,6 +456,63 @@
             }
         }
 
+        // 创建媒体元素
+        function createMediaElement(file) {
+            const isVideo = file.filename.match(/\.(mp4|webm|ogg)$/i);
+            const media = document.createElement(isVideo ? 'video' : 'img');
+            media.src = `/api/preview/${file.filename}?token=${localStorage.getItem('token')}`;
+            
+            if (isVideo) {
+                media.preload = 'metadata';
+                media.muted = true;
+                media.playsInline = true;
+                media.load();
+                
+                media.onloadeddata = function() {
+                    media.currentTime = 0;
+                };
+            }
+            
+            return media;
+        }
+
+        // 获取或创建媒体元素
+        function getOrCreateMedia(file) {
+            if (mediaCache.has(file.filename)) {
+                return mediaCache.get(file.filename);
+            }
+            
+            const media = createMediaElement(file);
+            mediaCache.set(file.filename, media);
+            return media;
+        }
+
+        // 过滤媒体文件
+        function filterMedia(type) {
+            const gallery = document.getElementById('gallery');
+            gallery.innerHTML = '';
+            
+            // 更新标签状态
+            document.querySelectorAll('.filter-tab').forEach(tab => {
+                tab.classList.remove('active');
+                if (tab.dataset.filter === type) {
+                    tab.classList.add('active');
+                }
+            });
+            
+            // 过滤文件
+            const filteredFiles = type === 'all' ? allFiles : allFiles.filter(file => {
+                const isVideo = file.filename.match(/\.(mp4|webm|ogg)$/i);
+                return type === 'video' ? isVideo : !isVideo;
+            });
+            
+            // 显示过滤后的文件
+            filteredFiles.forEach(file => {
+                const card = createImageCard(file);
+                gallery.appendChild(card);
+            });
+        }
+
         function createImageCard(file) {
             const card = document.createElement('div');
             card.className = 'image-card';
@@ -430,10 +520,10 @@
             const container = document.createElement('div');
             container.className = 'image-container';
             
-            const media = document.createElement(file.filename.match(/\.(mp4|webm|ogg)$/i) ? 'video' : 'img');
-            media.src = `/api/preview/${file.filename}?token=${localStorage.getItem('token')}`;
-            if (file.filename.match(/\.(mp4|webm|ogg)$/i)) {
-                media.preload = 'metadata';
+            const isVideo = file.filename.match(/\.(mp4|webm|ogg)$/i);
+            const media = getOrCreateMedia(file);
+            
+            if (isVideo) {
                 const playIcon = document.createElement('div');
                 playIcon.className = 'play-icon';
                 container.appendChild(playIcon);
@@ -461,7 +551,6 @@
             card.appendChild(fileInfo);
             
             card.onclick = () => {
-                const isVideo = file.filename.match(/\.(mp4|webm|ogg)$/i);
                 openPreview(file.filename, file.size, isVideo);
             };
             
@@ -581,7 +670,7 @@
             }
         }
 
-        // 删除文件
+        // 删除文件时清除缓存
         async function deleteImage(filename) {
             const token = checkAuth();
             if (!confirm('确定要删除这个文件吗？')) {
@@ -597,6 +686,7 @@
                 });
 
                 if (response.ok) {
+                    mediaCache.delete(filename); // 清除缓存
                     loadImages();
                 } else {
                     const data = await response.json();
