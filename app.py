@@ -25,8 +25,8 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = 'jwt-secret-key'  # 请在生产环境中更改
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB 限制
-app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif'}
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB 限制
+app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'mp4', 'webm', 'ogg'}
 
 # 确保上传目录存在
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -36,8 +36,18 @@ db = SQLAlchemy(app)
 jwt = JWTManager(app)
 
 def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+    if '.' not in filename:
+        logger.warning(f"文件名没有扩展名: {filename}")
+        return False
+    
+    extension = filename.rsplit('.', 1)[1].lower()
+    is_allowed = extension in app.config['ALLOWED_EXTENSIONS']
+    
+    if not is_allowed:
+        logger.warning(f"不支持的文件类型: {filename} (扩展名: {extension})")
+        logger.debug(f"允许的扩展名: {app.config['ALLOWED_EXTENSIONS']}")
+    
+    return is_allowed
 
 # 用户模型
 class User(db.Model):
@@ -133,6 +143,9 @@ def upload_file():
             logger.warning("上传的文件名为空")
             return jsonify({'error': '没有选择文件'}), 400
         
+        logger.info(f"尝试上传文件: {file.filename}")
+        logger.debug(f"文件类型: {file.content_type}")
+        
         if not allowed_file(file.filename):
             logger.warning(f"不支持的文件类型: {file.filename}")
             return jsonify({'error': '不支持的文件类型'}), 400
@@ -146,6 +159,8 @@ def upload_file():
         
         filename = secure_filename(file.filename)
         file_path = os.path.join(user.upload_folder, filename)
+        
+        logger.info(f"保存文件到: {file_path}")
         file.save(file_path)
         
         logger.info(f"文件上传成功: {filename}")
@@ -207,10 +222,23 @@ def preview_image(filename):
         if not os.path.exists(file_path):
             return jsonify({'error': '文件不存在'}), 404
             
-        # 返回图片
+        # 根据文件类型返回不同的 MIME 类型
+        file_ext = filename.rsplit('.', 1)[1].lower()
+        mime_types = {
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'gif': 'image/gif',
+            'mp4': 'video/mp4',
+            'webm': 'video/webm',
+            'ogg': 'video/ogg'
+        }
+        mime_type = mime_types.get(file_ext, 'application/octet-stream')
+            
+        # 返回文件
         return send_file(
             file_path,
-            mimetype='image/jpeg'
+            mimetype=mime_type
         )
     except pyjwt.ExpiredSignatureError:
         return jsonify({'error': 'token已过期'}), 401

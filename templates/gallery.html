@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inslulu - 图片预览</title>
+    <title>Inslulu - 媒体预览</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -27,6 +27,7 @@
             padding: 20px;
         }
         .image-card {
+            position: relative;
             background: white;
             padding: 10px;
             border-radius: 8px;
@@ -37,11 +38,38 @@
         .image-card:hover {
             transform: scale(1.02);
         }
-        .image-card img {
+        .image-card img,
+        .image-card video {
             width: 100%;
-            height: 200px;
+            height: 100%;
             object-fit: cover;
             border-radius: 4px;
+        }
+        .image-card video {
+            pointer-events: none;
+        }
+        .play-button {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 48px;
+            height: 48px;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+        .play-button::before {
+            content: '';
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 12px 0 12px 20px;
+            border-color: transparent transparent transparent white;
+            margin-left: 4px;
         }
         button {
             padding: 0.5rem 1rem;
@@ -156,10 +184,14 @@
             max-width: 800px;
             text-align: center;
         }
-        .preview-image {
+        .preview-image, .preview-video {
             max-width: 100%;
             max-height: 80vh;
             object-fit: contain;
+        }
+        .preview-video {
+            width: 100%;
+            background: #000;
         }
         .preview-info {
             color: white;
@@ -207,11 +239,62 @@
             cursor: pointer;
             z-index: 1001;
         }
+        .media-type {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: white;
+            background: rgba(0, 0, 0, 0.6);
+        }
+        .image-container {
+            position: relative;
+            width: 100%;
+            padding-bottom: 100%;
+            margin-bottom: 8px;
+        }
+        .image-container img,
+        .image-container video {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+        .play-icon {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 48px;
+            height: 48px;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 1;
+        }
+        .play-icon::before {
+            content: '';
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 12px 0 12px 20px;
+            border-color: transparent transparent transparent white;
+            margin-left: 4px;
+        }
+        .file-info {
+            display: none;
+        }
         @media (max-width: 768px) {
             .gallery {
                 display: grid;
                 grid-template-columns: repeat(4, 1fr);
-                gap: 0;
+                gap: 1px;
                 padding: 0;
             }
             .image-card {
@@ -220,13 +303,16 @@
                 padding: 0;
                 border-radius: 0;
                 box-shadow: none;
+                aspect-ratio: 1;
             }
-            .image-card::before {
-                content: '';
-                display: block;
-                padding-top: 100%;
+            .image-container {
+                position: relative;
+                width: 100%;
+                padding-bottom: 100%;
+                margin-bottom: 0;
             }
-            .image-card img {
+            .image-container img,
+            .image-container video {
                 position: absolute;
                 top: 0;
                 left: 0;
@@ -235,19 +321,29 @@
                 object-fit: cover;
                 border-radius: 0;
             }
+            .file-info {
+                display: none;
+            }
+            .play-icon {
+                width: 32px;
+                height: 32px;
+            }
+            .play-icon::before {
+                border-width: 8px 0 8px 14px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>Inslulu 图片预览</h1>
+        <h1>Inslulu 媒体预览</h1>
         <button onclick="logout()">退出登录</button>
     </div>
 
     <div class="upload-container">
-        <input type="file" id="fileInput" accept="image/*" multiple onchange="previewSelectedImages(event)">
-        <label for="fileInput" class="upload-btn">选择图片</label>
-        <button onclick="uploadFiles()">上传图片</button>
+        <input type="file" id="fileInput" accept="image/*,video/*" multiple onchange="previewSelectedFiles(event)">
+        <label for="fileInput" class="upload-btn">选择文件</label>
+        <button onclick="uploadFiles()">上传文件</button>
         <div id="errorMessage" class="error-message"></div>
         <div id="previewContainer" style="display: none;">
             <div id="previewGrid" class="preview-grid"></div>
@@ -263,13 +359,13 @@
     </div>
 
     <div class="gallery" id="gallery">
-        <!-- 图片将通过 JavaScript 动态加载 -->
+        <!-- 媒体将通过 JavaScript 动态加载 -->
     </div>
 
     <!-- 预览模态框 -->
     <div id="previewModal" class="preview-modal">
         <div class="preview-content">
-            <img id="previewModalImage" class="preview-image" src="" alt="">
+            <div id="previewMedia"></div>
             <div class="preview-info">
                 <div id="previewFileName"></div>
                 <div id="previewFileSize"></div>
@@ -296,7 +392,7 @@
             window.location.href = '/';
         }
 
-        // 加载图片列表
+        // 加载媒体列表
         async function loadImages() {
             const token = checkAuth();
             try {
@@ -312,20 +408,14 @@
                     gallery.innerHTML = '';
 
                     data.files.forEach(file => {
-                        const card = document.createElement('div');
-                        card.className = 'image-card';
-                        card.innerHTML = `
-                            <img src="/api/preview/${file.filename}?token=${token}" 
-                                 alt="${file.filename}" 
-                                 onclick="openPreview('${file.filename}', ${file.size})">
-                        `;
+                        const card = createImageCard(file);
                         gallery.appendChild(card);
                     });
                 } else {
                     if (response.status === 401) {
                         logout();
                     } else {
-                        showError('加载图片失败');
+                        showError('加载文件失败');
                     }
                 }
             } catch (error) {
@@ -333,8 +423,53 @@
             }
         }
 
-        // 预览选择的图片
-        function previewSelectedImages(event) {
+        function createImageCard(file) {
+            const card = document.createElement('div');
+            card.className = 'image-card';
+            
+            const container = document.createElement('div');
+            container.className = 'image-container';
+            
+            const media = document.createElement(file.filename.match(/\.(mp4|webm|ogg)$/i) ? 'video' : 'img');
+            media.src = `/api/preview/${file.filename}?token=${localStorage.getItem('token')}`;
+            if (file.filename.match(/\.(mp4|webm|ogg)$/i)) {
+                media.preload = 'metadata';
+                const playIcon = document.createElement('div');
+                playIcon.className = 'play-icon';
+                container.appendChild(playIcon);
+            }
+            
+            const fileInfo = document.createElement('div');
+            fileInfo.className = 'file-info';
+            
+            const fileName = document.createElement('div');
+            fileName.className = 'file-name';
+            fileName.textContent = file.filename;
+            
+            const deleteBtn = document.createElement('div');
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteImage(file.filename);
+            };
+            
+            fileInfo.appendChild(fileName);
+            fileInfo.appendChild(deleteBtn);
+            
+            container.appendChild(media);
+            card.appendChild(container);
+            card.appendChild(fileInfo);
+            
+            card.onclick = () => {
+                const isVideo = file.filename.match(/\.(mp4|webm|ogg)$/i);
+                openPreview(file.filename, file.size, isVideo);
+            };
+            
+            return card;
+        }
+
+        // 预览选择的文件
+        function previewSelectedFiles(event) {
             const files = event.target.files;
             const previewContainer = document.getElementById('previewContainer');
             const previewGrid = document.getElementById('previewGrid');
@@ -343,18 +478,31 @@
             previewGrid.innerHTML = '';
             previewContainer.style.display = 'block';
             
-            selectedCount.textContent = `已选择 ${files.length} 张图片`;
+            selectedCount.textContent = `已选择 ${files.length} 个文件`;
             
             const previewCount = Math.min(files.length, 9);
             
             for (let i = 0; i < previewCount; i++) {
                 const file = files[i];
                 const reader = new FileReader();
+                const isVideo = file.type.startsWith('video/');
                 
                 reader.onload = function(e) {
                     const previewItem = document.createElement('div');
                     previewItem.className = 'preview-item';
-                    previewItem.innerHTML = `<img src="${e.target.result}" alt="预览图片">`;
+                    
+                    if (isVideo) {
+                        previewItem.innerHTML = `
+                            <video src="${e.target.result}" 
+                                   style="width: 100%; height: 100%; object-fit: cover;"
+                                   preload="metadata">
+                            </video>
+                            <div class="play-button"></div>`;
+                    } else {
+                        previewItem.innerHTML = `
+                            <img src="${e.target.result}" alt="预览图片">`;
+                    }
+                    
                     previewGrid.appendChild(previewItem);
                 };
                 
@@ -362,14 +510,14 @@
             }
         }
 
-        // 上传多张图片
+        // 上传多张文件
         async function uploadFiles() {
             const token = checkAuth();
             const fileInput = document.getElementById('fileInput');
             const files = fileInput.files;
 
             if (files.length === 0) {
-                showError('请选择要上传的图片');
+                showError('请选择要上传的文件');
                 return;
             }
 
@@ -387,7 +535,7 @@
                 const formData = new FormData();
                 formData.append('file', files[i]);
 
-                progressText.textContent = `正在上传第 ${i + 1}/${totalFiles} 张图片`;
+                progressText.textContent = `正在上传第 ${i + 1}/${totalFiles} 个文件`;
                 uploadStatus.textContent = `已成功: ${successCount} 失败: ${failCount}`;
 
                 try {
@@ -419,7 +567,7 @@
             document.getElementById('previewContainer').style.display = 'none';
             
             progressText.textContent = '上传完成';
-            uploadStatus.textContent = `上传完成：成功 ${successCount} 张，失败 ${failCount} 张`;
+            uploadStatus.textContent = `上传完成：成功 ${successCount} 个，失败 ${failCount} 个`;
             
             setTimeout(() => {
                 progressContainer.style.display = 'none';
@@ -429,14 +577,14 @@
             if (successCount > 0) {
                 loadImages();
             } else {
-                showError('所有图片上传失败');
+                showError('所有文件上传失败');
             }
         }
 
-        // 删除图片
+        // 删除文件
         async function deleteImage(filename) {
             const token = checkAuth();
-            if (!confirm('确定要删除这张图片吗？')) {
+            if (!confirm('确定要删除这个文件吗？')) {
                 return;
             }
 
@@ -481,14 +629,24 @@
         let currentPreviewFile = null;
 
         // 打开预览
-        function openPreview(filename, size) {
+        function openPreview(filename, size, isVideo) {
             const token = checkAuth();
             const modal = document.getElementById('previewModal');
-            const previewImage = document.getElementById('previewModalImage');
+            const previewMedia = document.getElementById('previewMedia');
             const previewFileName = document.getElementById('previewFileName');
             const previewFileSize = document.getElementById('previewFileSize');
 
-            previewImage.src = `/api/preview/${filename}?token=${token}`;
+            if (isVideo) {
+                previewMedia.innerHTML = `
+                    <video class="preview-video" controls>
+                        <source src="/api/preview/${filename}?token=${token}" type="video/mp4">
+                        您的浏览器不支持视频播放
+                    </video>`;
+            } else {
+                previewMedia.innerHTML = `
+                    <img class="preview-image" src="/api/preview/${filename}?token=${token}" alt="${filename}">`;
+            }
+
             previewFileName.textContent = filename;
             previewFileSize.textContent = formatFileSize(size);
             currentPreviewFile = filename;
@@ -503,9 +661,9 @@
             currentPreviewFile = null;
         }
 
-        // 删除预览中的图片
+        // 删除预览中的文件
         async function deletePreviewImage() {
-            if (currentPreviewFile && confirm('确定要删除这张图片吗？')) {
+            if (currentPreviewFile && confirm('确定要删除这个文件吗？')) {
                 await deleteImage(currentPreviewFile);
                 closePreview();
             }
@@ -521,7 +679,7 @@
             e.stopPropagation();
         });
 
-        // 页面加载时检查登录状态并加载图片
+        // 页面加载时检查登录状态并加载媒体
         window.onload = function() {
             checkAuth();
             loadImages();
