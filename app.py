@@ -99,6 +99,11 @@ def login():
         user = User.query.filter_by(username=data['username']).first()
         
         if user and user.check_password(data['password']):
+            # 检查并创建用户上传文件夹
+            if not os.path.exists(user.upload_folder):
+                os.makedirs(user.upload_folder, exist_ok=True)
+                logger.info(f"创建用户上传文件夹: {user.upload_folder}")
+            
             access_token = create_access_token(
                 identity=str(user.id),  # 将用户ID转换为字符串
                 expires_delta=timedelta(days=1)
@@ -259,4 +264,4 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
     logger.info("服务器启动成功")
-    app.run(debug=True, port=5001) 
+    app.run(debug=True, host='0.0.0.0', port=5001) 
