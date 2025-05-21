@@ -428,7 +428,6 @@
         }
 
         let allFiles = []; // 存储所有文件数据
-        let mediaCache = new Map(); // 存储媒体元素缓存
 
         // 加载媒体列表
         async function loadImages() {
@@ -454,37 +453,6 @@
             } catch (error) {
                 showError('网络错误，请稍后重试');
             }
-        }
-
-        // 创建媒体元素
-        function createMediaElement(file) {
-            const isVideo = file.filename.match(/\.(mp4|webm|ogg)$/i);
-            const media = document.createElement(isVideo ? 'video' : 'img');
-            media.src = `/api/preview/${file.filename}?token=${localStorage.getItem('token')}`;
-            
-            if (isVideo) {
-                media.preload = 'metadata';
-                media.muted = true;
-                media.playsInline = true;
-                media.load();
-                
-                media.onloadeddata = function() {
-                    media.currentTime = 0;
-                };
-            }
-            
-            return media;
-        }
-
-        // 获取或创建媒体元素
-        function getOrCreateMedia(file) {
-            if (mediaCache.has(file.filename)) {
-                return mediaCache.get(file.filename);
-            }
-            
-            const media = createMediaElement(file);
-            mediaCache.set(file.filename, media);
-            return media;
         }
 
         // 过滤媒体文件
@@ -521,9 +489,20 @@
             container.className = 'image-container';
             
             const isVideo = file.filename.match(/\.(mp4|webm|ogg)$/i);
-            const media = getOrCreateMedia(file);
+            const media = document.createElement(isVideo ? 'video' : 'img');
+            media.src = `/api/preview/${file.filename}?token=${localStorage.getItem('token')}`;
             
             if (isVideo) {
+                media.preload = 'metadata';
+                media.muted = true;
+                media.playsInline = true;
+                media.load();
+                
+                // 确保视频加载完成后显示首帧
+                media.onloadeddata = function() {
+                    media.currentTime = 0;
+                };
+                
                 const playIcon = document.createElement('div');
                 playIcon.className = 'play-icon';
                 container.appendChild(playIcon);
@@ -670,7 +649,7 @@
             }
         }
 
-        // 删除文件时清除缓存
+        // 删除文件
         async function deleteImage(filename) {
             const token = checkAuth();
             if (!confirm('确定要删除这个文件吗？')) {
@@ -686,7 +665,6 @@
                 });
 
                 if (response.ok) {
-                    mediaCache.delete(filename); // 清除缓存
                     loadImages();
                 } else {
                     const data = await response.json();
