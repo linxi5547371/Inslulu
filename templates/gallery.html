@@ -428,6 +428,10 @@
         }
 
         let allFiles = []; // 存储所有文件数据
+        let currentPage = 1;
+        const pageSize = 20; // 每页显示的资源数量
+        let isLoading = false;
+        let currentFilter = 'all';
 
         // 加载媒体列表
         async function loadImages() {
@@ -441,7 +445,9 @@
 
                 if (response.ok) {
                     const data = await response.json();
-                    allFiles = data.files; // 保存所有文件数据
+                    // 按上传时间排序，最新的在前面
+                    allFiles = data.files.sort((a, b) => b.upload_time - a.upload_time);
+                    currentPage = 1;
                     filterMedia('all'); // 默认显示全部
                 } else {
                     if (response.status === 401) {
@@ -459,6 +465,8 @@
         function filterMedia(type) {
             const gallery = document.getElementById('gallery');
             gallery.innerHTML = '';
+            currentPage = 1;
+            currentFilter = type;
             
             // 更新标签状态
             document.querySelectorAll('.filter-tab').forEach(tab => {
@@ -468,18 +476,58 @@
                 }
             });
             
+            // 加载第一页数据
+            loadMoreFiles();
+        }
+
+        // 加载更多文件
+        function loadMoreFiles() {
+            if (isLoading) return;
+            
+            const gallery = document.getElementById('gallery');
+            const start = (currentPage - 1) * pageSize;
+            const end = start + pageSize;
+            
             // 过滤文件
-            const filteredFiles = type === 'all' ? allFiles : allFiles.filter(file => {
+            const filteredFiles = currentFilter === 'all' ? allFiles : allFiles.filter(file => {
                 const isVideo = file.filename.match(/\.(mp4|webm|ogg)$/i);
-                return type === 'video' ? isVideo : !isVideo;
+                return currentFilter === 'video' ? isVideo : !isVideo;
             });
             
-            // 显示过滤后的文件
-            filteredFiles.forEach(file => {
+            // 获取当前页的文件
+            const currentPageFiles = filteredFiles.slice(start, end);
+            
+            if (currentPageFiles.length === 0) {
+                return;
+            }
+            
+            isLoading = true;
+            
+            // 显示当前页的文件
+            currentPageFiles.forEach(file => {
                 const card = createImageCard(file);
                 gallery.appendChild(card);
             });
+            
+            currentPage++;
+            isLoading = false;
         }
+
+        // 检查是否需要加载更多
+        function checkScroll() {
+            const gallery = document.getElementById('gallery');
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const windowHeight = window.innerHeight;
+            const documentHeight = document.documentElement.scrollHeight;
+            
+            // 当滚动到距离底部100px时加载更多
+            if (documentHeight - scrollTop - windowHeight < 100) {
+                loadMoreFiles();
+            }
+        }
+
+        // 添加滚动监听
+        window.addEventListener('scroll', checkScroll);
 
         function createImageCard(file) {
             const card = document.createElement('div');
