@@ -139,7 +139,8 @@
             overflow: hidden;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
-        .preview-item img {
+        .preview-item img,
+        .preview-item video {
             position: absolute;
             width: 100%;
             height: 100%;
@@ -591,6 +592,16 @@
             const previewGrid = document.getElementById('previewGrid');
             const selectedCount = document.getElementById('selectedCount');
             
+            // 检查文件大小
+            const maxSize = 1024 * 1024 * 1024; // 1GB
+            const oversizedFiles = Array.from(files).filter(file => file.size > maxSize);
+            
+            if (oversizedFiles.length > 0) {
+                showError(`以下文件超过1GB限制：${oversizedFiles.map(f => f.name).join(', ')}`);
+                event.target.value = ''; // 清空文件选择
+                return;
+            }
+            
             previewGrid.innerHTML = '';
             previewContainer.style.display = 'block';
             
@@ -600,29 +611,44 @@
             
             for (let i = 0; i < previewCount; i++) {
                 const file = files[i];
-                const reader = new FileReader();
                 const isVideo = file.type.startsWith('video/');
                 
-                reader.onload = function(e) {
-                    const previewItem = document.createElement('div');
-                    previewItem.className = 'preview-item';
-                    
-                    if (isVideo) {
-                        previewItem.innerHTML = `
-                            <video src="${e.target.result}" 
-                                   style="width: 100%; height: 100%; object-fit: cover;"
-                                   preload="metadata">
-                            </video>
-                            <div class="play-button"></div>`;
-                    } else {
-                        previewItem.innerHTML = `
-                            <img src="${e.target.result}" alt="预览图片">`;
-                    }
-                    
-                    previewGrid.appendChild(previewItem);
-                };
+                const previewItem = document.createElement('div');
+                previewItem.className = 'preview-item';
                 
-                reader.readAsDataURL(file);
+                if (isVideo) {
+                    const video = document.createElement('video');
+                    video.style.width = '100%';
+                    video.style.height = '100%';
+                    video.style.objectFit = 'cover';
+                    video.preload = 'metadata';
+                    video.muted = true;
+                    
+                    video.onloadeddata = function() {
+                        video.currentTime = 0;
+                    };
+                    
+                    const source = document.createElement('source');
+                    source.src = URL.createObjectURL(file);
+                    video.appendChild(source);
+                    
+                    const playButton = document.createElement('div');
+                    playButton.className = 'play-button';
+                    
+                    previewItem.appendChild(video);
+                    previewItem.appendChild(playButton);
+                } else {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        img.alt = '预览图片';
+                        previewItem.appendChild(img);
+                    };
+                    reader.readAsDataURL(file);
+                }
+                
+                previewGrid.appendChild(previewItem);
             }
         }
 
@@ -634,6 +660,15 @@
 
             if (files.length === 0) {
                 showError('请选择要上传的文件');
+                return;
+            }
+
+            // 检查文件大小
+            const maxSize = 1024 * 1024 * 1024; // 1GB
+            const oversizedFiles = Array.from(files).filter(file => file.size > maxSize);
+            
+            if (oversizedFiles.length > 0) {
+                showError(`以下文件超过1GB限制：${oversizedFiles.map(f => f.name).join(', ')}`);
                 return;
             }
 
