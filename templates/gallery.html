@@ -430,9 +430,10 @@
 
         let allFiles = []; // 存储所有文件数据
         let currentPage = 1;
-        const pageSize = 20; // 每页显示的资源数量
+        const pageSize = 40; // 每页显示的资源数量
         let isLoading = false;
         let currentFilter = 'all';
+        let hasMoreFiles = true; // 添加标记，表示是否还有更多文件
 
         // 加载媒体列表
         async function loadImages() {
@@ -449,6 +450,7 @@
                     // 按上传时间排序，最新的在前面
                     allFiles = data.files.sort((a, b) => b.upload_time - a.upload_time);
                     currentPage = 1;
+                    hasMoreFiles = true; // 重置标记
                     filterMedia('all'); // 默认显示全部
                 } else {
                     if (response.status === 401) {
@@ -468,6 +470,7 @@
             gallery.innerHTML = '';
             currentPage = 1;
             currentFilter = type;
+            hasMoreFiles = true;
             
             // 更新标签状态
             document.querySelectorAll('.filter-tab').forEach(tab => {
@@ -483,7 +486,7 @@
 
         // 加载更多文件
         function loadMoreFiles() {
-            if (isLoading) return;
+            if (isLoading || !hasMoreFiles) return;
             
             const gallery = document.getElementById('gallery');
             const start = (currentPage - 1) * pageSize;
@@ -499,6 +502,7 @@
             const currentPageFiles = filteredFiles.slice(start, end);
             
             if (currentPageFiles.length === 0) {
+                hasMoreFiles = false;
                 return;
             }
             
@@ -512,10 +516,28 @@
             
             currentPage++;
             isLoading = false;
+
+            // 检查是否需要继续加载
+            checkNeedMoreContent();
+        }
+
+        // 检查是否需要加载更多内容
+        function checkNeedMoreContent() {
+            const gallery = document.getElementById('gallery');
+            const galleryHeight = gallery.scrollHeight;
+            const windowHeight = window.innerHeight;
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            
+            // 如果内容高度小于视窗高度，继续加载
+            if (galleryHeight < windowHeight && hasMoreFiles) {
+                loadMoreFiles();
+            }
         }
 
         // 检查是否需要加载更多
         function checkScroll() {
+            if (isLoading || !hasMoreFiles) return;
+            
             const gallery = document.getElementById('gallery');
             const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
             const windowHeight = window.innerHeight;
@@ -529,6 +551,9 @@
 
         // 添加滚动监听
         window.addEventListener('scroll', checkScroll);
+
+        // 添加窗口大小改变事件监听
+        window.addEventListener('resize', checkNeedMoreContent);
 
         function createImageCard(file) {
             const card = document.createElement('div');
