@@ -82,6 +82,76 @@
         .upload-btn:hover {
             background-color: #218838;
         }
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 15px;
+            max-width: 300px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .preview-item {
+            position: relative;
+            width: 100%;
+            padding-bottom: 100%;
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .preview-item img {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+        .selected-count {
+            margin-top: 8px;
+            font-size: 13px;
+            color: #666;
+            text-align: center;
+        }
+        #previewContainer {
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            margin-top: 15px;
+        }
+        .progress-container {
+            display: none;
+            margin-top: 15px;
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background-color: #f0f0f0;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 5px;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #28a745;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .progress-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .upload-status {
+            font-size: 13px;
+            color: #666;
+            margin-top: 10px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -91,12 +161,20 @@
     </div>
 
     <div class="upload-container">
-        <input type="file" id="fileInput" accept="image/*" onchange="previewSelectedImage(event)">
+        <input type="file" id="fileInput" accept="image/*" multiple onchange="previewSelectedImages(event)">
         <label for="fileInput" class="upload-btn">选择图片</label>
-        <button onclick="uploadFile()">上传图片</button>
+        <button onclick="uploadFiles()">上传图片</button>
         <div id="errorMessage" class="error-message"></div>
-        <div id="previewContainer" style="display: none; margin-top: 20px;">
-            <img id="previewImage" style="max-width: 300px; max-height: 300px; object-fit: contain;">
+        <div id="previewContainer" style="display: none;">
+            <div id="previewGrid" class="preview-grid"></div>
+            <div id="selectedCount" class="selected-count"></div>
+        </div>
+        <div id="progressContainer" class="progress-container">
+            <div class="progress-bar">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+            <div id="progressText" class="progress-text">准备上传...</div>
+            <div id="uploadStatus" class="upload-status"></div>
         </div>
     </div>
 
@@ -164,53 +242,111 @@
         }
 
         // 预览选择的图片
-        function previewSelectedImage(event) {
-            const file = event.target.files[0];
-            if (file) {
+        function previewSelectedImages(event) {
+            const files = event.target.files;
+            const previewContainer = document.getElementById('previewContainer');
+            const previewGrid = document.getElementById('previewGrid');
+            const selectedCount = document.getElementById('selectedCount');
+            
+            previewGrid.innerHTML = '';
+            previewContainer.style.display = 'block';
+            
+            // 显示选中的图片数量
+            selectedCount.textContent = `已选择 ${files.length} 张图片`;
+            
+            // 只预览前9张图片
+            const previewCount = Math.min(files.length, 9);
+            
+            for (let i = 0; i < previewCount; i++) {
+                const file = files[i];
                 const reader = new FileReader();
+                
                 reader.onload = function(e) {
-                    const previewContainer = document.getElementById('previewContainer');
-                    const previewImage = document.getElementById('previewImage');
-                    previewImage.src = e.target.result;
-                    previewContainer.style.display = 'block';
+                    const previewItem = document.createElement('div');
+                    previewItem.className = 'preview-item';
+                    previewItem.innerHTML = `<img src="${e.target.result}" alt="预览图片">`;
+                    previewGrid.appendChild(previewItem);
                 };
+                
                 reader.readAsDataURL(file);
             }
         }
 
-        // 上传图片
-        async function uploadFile() {
+        // 上传多张图片
+        async function uploadFiles() {
             const token = checkAuth();
             const fileInput = document.getElementById('fileInput');
-            const file = fileInput.files[0];
+            const files = fileInput.files;
 
-            if (!file) {
+            if (files.length === 0) {
                 showError('请选择要上传的图片');
                 return;
             }
 
-            const formData = new FormData();
-            formData.append('file', file);
+            // 显示进度条
+            const progressContainer = document.getElementById('progressContainer');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            const uploadStatus = document.getElementById('uploadStatus');
+            progressContainer.style.display = 'block';
 
-            try {
-                const response = await fetch('/api/upload', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: formData
-                });
+            let successCount = 0;
+            let failCount = 0;
+            const totalFiles = files.length;
 
-                if (response.ok) {
-                    fileInput.value = '';
-                    document.getElementById('previewContainer').style.display = 'none';
-                    loadImages();
-                } else {
-                    const data = await response.json();
-                    showError(data.error || '上传失败');
+            for (let i = 0; i < files.length; i++) {
+                const formData = new FormData();
+                formData.append('file', files[i]);
+
+                // 更新进度文本
+                progressText.textContent = `正在上传第 ${i + 1}/${totalFiles} 张图片`;
+                uploadStatus.textContent = `已成功: ${successCount} 失败: ${failCount}`;
+
+                try {
+                    const response = await fetch('/api/upload', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: formData
+                    });
+
+                    if (response.ok) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                    }
+
+                    // 更新进度条
+                    const progress = ((i + 1) / totalFiles) * 100;
+                    progressFill.style.width = `${progress}%`;
+
+                } catch (error) {
+                    failCount++;
+                    // 更新进度条
+                    const progress = ((i + 1) / totalFiles) * 100;
+                    progressFill.style.width = `${progress}%`;
                 }
-            } catch (error) {
-                showError('网络错误，请稍后重试');
+            }
+
+            // 清空文件输入和预览
+            fileInput.value = '';
+            document.getElementById('previewContainer').style.display = 'none';
+            
+            // 显示最终状态
+            progressText.textContent = '上传完成';
+            uploadStatus.textContent = `上传完成：成功 ${successCount} 张，失败 ${failCount} 张`;
+            
+            // 3秒后隐藏进度条
+            setTimeout(() => {
+                progressContainer.style.display = 'none';
+                progressFill.style.width = '0%';
+            }, 3000);
+
+            if (successCount > 0) {
+                loadImages();
+            } else {
+                showError('所有图片上传失败');
             }
         }
 
