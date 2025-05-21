@@ -36,7 +36,3 @@ python3 app.py
 ## 贡献
 欢迎提交 Issue 和 Pull Request
 
-```
-python3 app.py
-````
-
