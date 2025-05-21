@@ -31,20 +31,17 @@
             padding: 10px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        .image-card:hover {
+            transform: scale(1.02);
         }
         .image-card img {
             width: 100%;
             height: 200px;
             object-fit: cover;
             border-radius: 4px;
-        }
-        .image-info {
-            margin-top: 10px;
-        }
-        .image-actions {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 10px;
         }
         button {
             padding: 0.5rem 1rem;
@@ -56,12 +53,6 @@
         }
         button:hover {
             background-color: #0056b3;
-        }
-        button.delete {
-            background-color: #dc3545;
-        }
-        button.delete:hover {
-            background-color: #c82333;
         }
         .error-message {
             color: red;
@@ -112,13 +103,6 @@
             color: #666;
             text-align: center;
         }
-        #previewContainer {
-            background-color: #fff;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-            margin-top: 15px;
-        }
         .progress-container {
             display: none;
             margin-top: 15px;
@@ -152,6 +136,106 @@
             margin-top: 10px;
             text-align: center;
         }
+        .preview-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .preview-content {
+            position: relative;
+            width: 90%;
+            max-width: 800px;
+            text-align: center;
+        }
+        .preview-image {
+            max-width: 100%;
+            max-height: 80vh;
+            object-fit: contain;
+        }
+        .preview-info {
+            color: white;
+            margin-top: 15px;
+            font-size: 14px;
+            pointer-events: none;
+        }
+        .preview-actions {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            pointer-events: auto;
+        }
+        .delete-icon {
+            width: 24px;
+            height: 24px;
+            position: relative;
+            cursor: pointer;
+            background: rgba(220, 53, 69, 0.9);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .delete-icon::before,
+        .delete-icon::after {
+            content: '';
+            position: absolute;
+            width: 12px;
+            height: 2px;
+            background-color: white;
+        }
+        .delete-icon::before {
+            transform: rotate(45deg);
+        }
+        .delete-icon::after {
+            transform: rotate(-45deg);
+        }
+        .close-preview {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            z-index: 1001;
+        }
+        @media (max-width: 768px) {
+            .gallery {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 0;
+                padding: 0;
+            }
+            .image-card {
+                position: relative;
+                width: 100%;
+                padding: 0;
+                border-radius: 0;
+                box-shadow: none;
+            }
+            .image-card::before {
+                content: '';
+                display: block;
+                padding-top: 100%;
+            }
+            .image-card img {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                border-radius: 0;
+            }
+        }
     </style>
 </head>
 <body>
@@ -180,6 +264,20 @@
 
     <div class="gallery" id="gallery">
         <!-- 图片将通过 JavaScript 动态加载 -->
+    </div>
+
+    <!-- 预览模态框 -->
+    <div id="previewModal" class="preview-modal">
+        <div class="preview-content">
+            <img id="previewModalImage" class="preview-image" src="" alt="">
+            <div class="preview-info">
+                <div id="previewFileName"></div>
+                <div id="previewFileSize"></div>
+            </div>
+            <div class="preview-actions">
+                <div class="delete-icon" onclick="deletePreviewImage()"></div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -217,15 +315,9 @@
                         const card = document.createElement('div');
                         card.className = 'image-card';
                         card.innerHTML = `
-                            <img src="/api/preview/${file.filename}?token=${token}" alt="${file.filename}">
-                            <div class="image-info">
-                                <div>${file.filename}</div>
-                                <div>${formatFileSize(file.size)}</div>
-                            </div>
-                            <div class="image-actions">
-                                <button onclick="previewImage('${file.filename}')">预览</button>
-                                <button class="delete" onclick="deleteImage('${file.filename}')">删除</button>
-                            </div>
+                            <img src="/api/preview/${file.filename}?token=${token}" 
+                                 alt="${file.filename}" 
+                                 onclick="openPreview('${file.filename}', ${file.size})">
                         `;
                         gallery.appendChild(card);
                     });
@@ -251,10 +343,8 @@
             previewGrid.innerHTML = '';
             previewContainer.style.display = 'block';
             
-            // 显示选中的图片数量
             selectedCount.textContent = `已选择 ${files.length} 张图片`;
             
-            // 只预览前9张图片
             const previewCount = Math.min(files.length, 9);
             
             for (let i = 0; i < previewCount; i++) {
@@ -283,7 +373,6 @@
                 return;
             }
 
-            // 显示进度条
             const progressContainer = document.getElementById('progressContainer');
             const progressFill = document.getElementById('progressFill');
             const progressText = document.getElementById('progressText');
@@ -298,7 +387,6 @@
                 const formData = new FormData();
                 formData.append('file', files[i]);
 
-                // 更新进度文本
                 progressText.textContent = `正在上传第 ${i + 1}/${totalFiles} 张图片`;
                 uploadStatus.textContent = `已成功: ${successCount} 失败: ${failCount}`;
 
@@ -317,27 +405,22 @@
                         failCount++;
                     }
 
-                    // 更新进度条
                     const progress = ((i + 1) / totalFiles) * 100;
                     progressFill.style.width = `${progress}%`;
 
                 } catch (error) {
                     failCount++;
-                    // 更新进度条
                     const progress = ((i + 1) / totalFiles) * 100;
                     progressFill.style.width = `${progress}%`;
                 }
             }
 
-            // 清空文件输入和预览
             fileInput.value = '';
             document.getElementById('previewContainer').style.display = 'none';
             
-            // 显示最终状态
             progressText.textContent = '上传完成';
             uploadStatus.textContent = `上传完成：成功 ${successCount} 张，失败 ${failCount} 张`;
             
-            // 3秒后隐藏进度条
             setTimeout(() => {
                 progressContainer.style.display = 'none';
                 progressFill.style.width = '0%';
@@ -376,56 +459,6 @@
             }
         }
 
-        // 预览图片
-        function previewImage(filename) {
-            const token = checkAuth();
-            const previewUrl = `/api/preview/${filename}?token=${token}`;
-            
-            // 创建一个新的窗口
-            const previewWindow = window.open('', '_blank');
-            previewWindow.document.write(`
-                <html>
-                <head>
-                    <title>预览图片</title>
-                    <style>
-                        body {
-                            margin: 0;
-                            padding: 20px;
-                            display: flex;
-                            justify-content: center;
-                            align-items: center;
-                            min-height: 100vh;
-                            background-color: #f5f5f5;
-                        }
-                        img {
-                            max-width: 100%;
-                            max-height: 90vh;
-                            object-fit: contain;
-                        }
-                        #loading {
-                            font-size: 18px;
-                            color: #666;
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div id="loading">加载中...</div>
-                </body>
-                </html>
-            `);
-            
-            // 直接使用 URL 加载图片
-            const img = new Image();
-            img.onload = function() {
-                previewWindow.document.body.innerHTML = '';
-                previewWindow.document.body.appendChild(img);
-            };
-            img.onerror = function() {
-                previewWindow.document.body.innerHTML = '<div style="color: red;">图片加载失败</div>';
-            };
-            img.src = previewUrl;
-        }
-
         // 显示错误信息
         function showError(message) {
             const errorMessage = document.getElementById('errorMessage');
@@ -445,6 +478,49 @@
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
+        let currentPreviewFile = null;
+
+        // 打开预览
+        function openPreview(filename, size) {
+            const token = checkAuth();
+            const modal = document.getElementById('previewModal');
+            const previewImage = document.getElementById('previewModalImage');
+            const previewFileName = document.getElementById('previewFileName');
+            const previewFileSize = document.getElementById('previewFileSize');
+
+            previewImage.src = `/api/preview/${filename}?token=${token}`;
+            previewFileName.textContent = filename;
+            previewFileSize.textContent = formatFileSize(size);
+            currentPreviewFile = filename;
+            
+            modal.style.display = 'flex';
+        }
+
+        // 关闭预览
+        function closePreview() {
+            const modal = document.getElementById('previewModal');
+            modal.style.display = 'none';
+            currentPreviewFile = null;
+        }
+
+        // 删除预览中的图片
+        async function deletePreviewImage() {
+            if (currentPreviewFile && confirm('确定要删除这张图片吗？')) {
+                await deleteImage(currentPreviewFile);
+                closePreview();
+            }
+        }
+
+        // 点击模态框任意位置关闭预览
+        document.getElementById('previewModal').addEventListener('click', function() {
+            closePreview();
+        });
+
+        // 阻止删除按钮的点击事件冒泡
+        document.querySelector('.delete-icon').addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+
         // 页面加载时检查登录状态并加载图片
         window.onload = function() {
             checkAuth();
@@ -452,4 +528,4 @@
         };
     </script>
 </body>
-</html> 
+</html>
